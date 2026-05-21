@@ -1,313 +1,745 @@
-import { useState, useEffect, useCallback } from "react";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>To-Do List</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
-const STORAGE_KEY = "dd_tasks_v3";
-
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f7f7f5;--surface:#ffffff;--surface2:#f0f0ed;--border:#e5e5e0;
+  --accent:#e8440a;--accent2:#ff6b35;--urgent:#dc2626;--medium:#d97706;
+  --low:#16a34a;--text:#1a1a1a;--muted:#888880;--done:#c5c5c0;
+  --shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);
+  --shadow-lg:0 4px 16px rgba(0,0,0,0.08);
 }
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;font-size:14px}
+.layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+
+/* Sidebar */
+.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:24px 16px;position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+.logo{font-size:16px;font-weight:800;letter-spacing:-0.5px;color:var(--text);padding:0 8px 20px;border-bottom:1px solid var(--border);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.logo-dot{width:8px;height:8px;background:var(--accent);border-radius:50%;display:inline-block}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:500;transition:all 0.15s;border:none;background:none;width:100%;text-align:left}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:var(--accent);color:white}
+.nav-item .count{margin-left:auto;font-size:11px;opacity:0.7;font-family:'JetBrains Mono',monospace}
+.nav-section{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);padding:16px 10px 6px;font-weight:600}
+.sidebar-bottom{margin-top:auto;border-top:1px solid var(--border);padding-top:16px}
+.stat-row{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:4px 10px}
+.stat-row span{color:var(--text);font-weight:600;font-family:'JetBrains Mono',monospace}
+
+/* Main */
+.main{padding:32px 40px 80px;max-width:860px}
+.page-header{margin-bottom:28px}
+.page-title{font-size:22px;font-weight:800;letter-spacing:-0.5px;color:var(--text)}
+.page-sub{font-size:12px;color:var(--muted);margin-top:3px;font-family:'JetBrains Mono',monospace}
+
+/* Today's Focus */
+.focus-section{background:var(--text);border-radius:12px;padding:20px 24px;margin-bottom:28px;color:white}
+.focus-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.focus-title{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;opacity:0.6}
+.focus-hint{font-size:11px;opacity:0.4;font-family:'JetBrains Mono',monospace}
+.focus-slots{display:flex;flex-direction:column;gap:8px}
+.focus-slot{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 14px;cursor:pointer;transition:all 0.15s}
+.focus-slot:hover{background:rgba(255,255,255,0.1)}
+.focus-slot.filled{border-color:rgba(232,68,10,0.4);background:rgba(232,68,10,0.12)}
+.focus-num{font-size:11px;font-family:'JetBrains Mono',monospace;opacity:0.4;width:16px;flex-shrink:0}
+.focus-text{font-size:13px;font-weight:500;flex:1;opacity:0.9}
+.focus-empty{font-size:12px;opacity:0.3;font-style:italic}
+.focus-remove{opacity:0;font-size:16px;color:rgba(255,255,255,0.5);background:none;border:none;cursor:pointer;transition:opacity 0.15s;padding:0 4px}
+.focus-slot:hover .focus-remove{opacity:1}
+
+/* Dump zone */
+.dump-zone{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px;box-shadow:var(--shadow)}
+.dump-zone:focus-within{border-color:var(--accent)}
+.dump-label{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:6px;font-weight:600}
+.dump-label::before{content:'';width:6px;height:6px;background:var(--accent);border-radius:50%;display:inline-block}
+textarea{width:100%;background:transparent;border:none;outline:none;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;line-height:1.7;resize:none;min-height:80px}
+textarea::placeholder{color:var(--muted)}
+.dump-actions{display:flex;justify-content:flex-end;margin-top:12px;gap:8px;align-items:center}
+
+/* Quick add */
+.quick-row{display:flex;gap:8px;margin-bottom:20px}
+.quick-input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;outline:none;box-shadow:var(--shadow);transition:border-color 0.15s}
+.quick-input:focus{border-color:var(--accent)}
+.quick-input::placeholder{color:var(--muted)}
+select{background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:'Inter',sans-serif;font-size:12px;padding:10px 10px;border-radius:8px;outline:none;cursor:pointer;box-shadow:var(--shadow)}
+
+/* Buttons */
+.btn{padding:9px 18px;border-radius:7px;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s;display:inline-flex;align-items:center;gap:7px}
+.btn-primary{background:var(--accent);color:white}
+.btn-primary:hover{background:#c73a08}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--muted)}
+.btn-ghost:hover{border-color:var(--text);color:var(--text)}
+.btn-sm{padding:5px 12px;font-size:11px;border-radius:6px}
+
+/* Filters */
+.filters{display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
+.filter-btn{background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:5px 14px;border-radius:20px;font-family:'Inter',sans-serif;font-size:11px;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;transition:all 0.15s}
+.filter-btn:hover{border-color:var(--text);color:var(--text)}
+.filter-btn.active{background:var(--text);border-color:var(--text);color:white}
+.filter-btn.f-urgent.active{background:var(--urgent);border-color:var(--urgent)}
+.filter-btn.f-medium.active{background:var(--medium);border-color:var(--medium)}
+.filter-btn.f-low.active{background:var(--low);border-color:var(--low)}
+.ml-auto{margin-left:auto}
+
+/* Task groups */
+.group{margin-bottom:24px}
+.group-label{font-size:10px;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;display:flex;align-items:center;gap:8px;font-weight:700}
+.group-line{flex:1;height:1px;background:var(--border)}
+
+/* Task card */
+.task{background:var(--surface);border:1px solid var(--border);border-radius:9px;margin-bottom:6px;box-shadow:var(--shadow);transition:all 0.15s;overflow:hidden}
+.task:hover{box-shadow:var(--shadow-lg);border-color:#d5d5d0}
+.task.done{opacity:0.45}
+.task-main{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;cursor:pointer}
+.task-check{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--border);background:transparent;cursor:pointer;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:11px;color:white;font-weight:bold;transition:all 0.15s}
+.task-check:hover{border-color:var(--accent)}
+.task-check.checked{background:var(--accent);border-color:var(--accent)}
+.task-body{flex:1;min-width:0}
+.task-text{font-size:13px;line-height:1.5;color:var(--text);font-weight:500}
+.task.done .task-text{text-decoration:line-through;color:var(--muted)}
+.task-meta{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;align-items:center}
+.tag{font-size:10px;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700}
+.tag-urgent{background:#fee2e2;color:var(--urgent)}
+.tag-medium{background:#fef3c7;color:var(--medium)}
+.tag-low{background:#dcfce7;color:var(--low)}
+.tag-source{background:var(--surface2);color:var(--muted);font-weight:500}
+.tag-overdue{background:#fee2e2;color:var(--urgent)}
+.task-date{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.task-actions{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity 0.15s}
+.task:hover .task-actions{opacity:1}
+.task-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 5px;border-radius:4px;transition:all 0.15s;font-family:'Inter',sans-serif;font-size:11px;font-weight:500}
+.task-btn:hover{background:var(--surface2);color:var(--text)}
+.task-btn.pin{color:#e8440a}
+.task-expand{display:none;padding:0 14px 12px 44px;border-top:1px solid var(--surface2)}
+.task-expand.open{display:block}
+.task-notes{width:100%;background:var(--surface2);border:none;border-radius:6px;padding:8px 10px;font-family:'Inter',sans-serif;font-size:12px;color:var(--text);outline:none;resize:none;min-height:60px;margin-top:8px}
+.task-notes::placeholder{color:var(--muted)}
+.task-due-input{background:var(--surface2);border:none;border-radius:6px;padding:6px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);outline:none;margin-top:6px;cursor:pointer}
+.expand-label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:600;margin-top:8px;display:block}
+
+/* Loading / error */
+.loading-bar{height:2px;background:linear-gradient(90deg,var(--accent),#ff9f1c);border-radius:2px;margin-bottom:20px;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:0.4}50%{opacity:1}}
+.error-msg{background:#fee2e2;border:1px solid #fecaca;color:var(--urgent);padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:16px}
+.success-msg{background:#dcfce7;border:1px solid #bbf7d0;color:var(--low);padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:16px}
+.spinner{width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty-state{text-align:center;padding:50px 20px;color:var(--muted);font-size:13px;line-height:1.8}
+.empty-big{font-size:17px;font-weight:800;color:var(--border);display:block;margin-bottom:8px}
+
+/* Summary */
+.summary-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px 24px;margin-bottom:20px;box-shadow:var(--shadow)}
+.summary-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--surface2);font-size:13px}
+.summary-row:last-child{border-bottom:none}
+.summary-num{font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--accent)}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(2px)}
+.modal{background:var(--surface);border-radius:12px;padding:24px;width:420px;max-width:90vw;box-shadow:var(--shadow-lg)}
+.modal-title{font-size:15px;font-weight:700;margin-bottom:16px;color:var(--text)}
+.modal-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:10px 12px;font-family:'Inter',sans-serif;font-size:13px;color:var(--text);outline:none;margin-bottom:10px}
+.modal-input:focus{border-color:var(--accent)}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.api-note{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5}
+
+/* Responsive */
+@media(max-width:700px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .main{padding:20px 16px 60px}
+}
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="logo"><div class="logo-dot"></div> To-Do List</div>
+
+    <div class="nav-section">Views</div>
+    <button class="nav-item active" id="nav-all" onclick="setView('all')">
+      <span>📋</span> All Tasks <span class="count" id="cnt-all">0</span>
+    </button>
+    <button class="nav-item" id="nav-today" onclick="setView('today')">
+      <span>🎯</span> Today's Focus <span class="count" id="cnt-today">3</span>
+    </button>
+    <button class="nav-item" id="nav-urgent" onclick="setView('urgent')">
+      <span>🔴</span> Urgent <span class="count" id="cnt-urgent">0</span>
+    </button>
+    <button class="nav-item" id="nav-overdue" onclick="setView('overdue')">
+      <span>⚠️</span> Overdue <span class="count" id="cnt-overdue">0</span>
+    </button>
+    <button class="nav-item" id="nav-done" onclick="setView('done')">
+      <span>✓</span> Completed <span class="count" id="cnt-done">0</span>
+    </button>
+    <button class="nav-item" id="nav-summary" onclick="setView('summary')">
+      <span>📊</span> Daily Summary
+    </button>
+
+    <div class="nav-section">Sources</div>
+    <button class="nav-item" id="nav-meeting" onclick="setView('meeting')">
+      <span>🤝</span> Meetings <span class="count" id="cnt-meeting">0</span>
+    </button>
+    <button class="nav-item" id="nav-slack" onclick="setView('slack')">
+      <span>💬</span> Slack <span class="count" id="cnt-slack">0</span>
+    </button>
+    <button class="nav-item" id="nav-personal" onclick="setView('personal')">
+      <span>💡</span> Personal <span class="count" id="cnt-personal">0</span>
+    </button>
+
+    <div class="sidebar-bottom">
+      <div class="stat-row">Open <span id="stat-open">0</span></div>
+      <div class="stat-row">Done today <span id="stat-done-today">0</span></div>
+      <div class="stat-row">Total <span id="stat-total">0</span></div>
+      <div style="padding:12px 10px 0">
+        <button class="btn btn-ghost btn-sm" style="width:100%" onclick="showApiModal()">⚙ API Key</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main" id="main-content">
+    <!-- rendered by JS -->
+  </div>
+</div>
+
+<!-- API Key Modal -->
+<div class="modal-overlay" id="apiModal" style="display:none">
+  <div class="modal">
+    <div class="modal-title">🔑 Anthropic API Key</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Required for AI task extraction. Get yours at <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a>. Stored locally in your browser only.</p>
+    <input class="modal-input" type="password" id="apiKeyInput" placeholder="sk-ant-..." />
+    <div class="api-note">⚠ Never share this file publicly with your API key inside it. For personal use only.</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeApiModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveApiKey()">Save Key</button>
+    </div>
+  </div>
+</div>
+
+<!-- Focus pick modal -->
+<div class="modal-overlay" id="focusModal" style="display:none">
+  <div class="modal">
+    <div class="modal-title">🎯 Pin to Today's Focus</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Pick a task to pin as one of your top 3 for today.</p>
+    <div id="focusPickList" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeFocusModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== STATE =====================
+let tasks = [];
+let focusPins = [null, null, null]; // task IDs
+let currentView = 'all';
+let currentFilter = 'all';
+let expandedTask = null;
+let apiKey = '';
+
+const TODAY = new Date().toISOString().split('T')[0];
+
+// ===================== STORAGE =====================
+function load() {
+  try {
+    const t = localStorage.getItem('dd_todo_tasks');
+    const f = localStorage.getItem('dd_todo_focus');
+    const k = localStorage.getItem('dd_api_key');
+    tasks = t ? JSON.parse(t) : [];
+    focusPins = f ? JSON.parse(f) : [null, null, null];
+    apiKey = k || '';
+  } catch { tasks = []; focusPins = [null, null, null]; }
+}
+
+function save() {
+  localStorage.setItem('dd_todo_tasks', JSON.stringify(tasks));
+  localStorage.setItem('dd_todo_focus', JSON.stringify(focusPins));
+}
+
+// ===================== HELPERS =====================
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
 function formatDate(ts) {
-  return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function getToday() {
-  return new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+function isOverdue(task) {
+  if (!task.dueDate || task.done) return false;
+  return task.dueDate < TODAY;
 }
 
-async function loadTasks() {
-  try {
-    const r = await window.storage.get(STORAGE_KEY);
-    return r ? JSON.parse(r.value) : [];
-  } catch { return []; }
+function isDueToday(task) {
+  if (!task.dueDate || task.done) return false;
+  return task.dueDate === TODAY;
 }
 
-async function saveTasks(tasks) {
-  try {
-    await window.storage.set(STORAGE_KEY, JSON.stringify(tasks));
-  } catch (e) { console.error("Save failed", e); }
+function todayStr() {
+  return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-async function extractTasksFromDump(text) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [{
-        role: "user",
-        content: `Extract action items from this brain dump. Return ONLY a JSON array, no markdown. Each item: { "text": "clear action item", "priority": "urgent|medium|low", "source": "meeting|slack|personal" }.
+function doneTodayCount() {
+  return tasks.filter(t => t.done && t.doneAt && t.doneAt.startsWith(TODAY)).length;
+}
 
-Rules:
-- urgent = blocking, time-sensitive, needed today
-- medium = important but not today-critical  
-- low = someday, nice-to-have
-- Make each task a clear actionable sentence
-- Infer source from context
+// ===================== VIEWS =====================
+const priorityOrder = { urgent: 0, medium: 1, low: 2 };
 
-Brain dump:
-${text}`
-      }]
-    })
+function getViewTasks() {
+  let list = [...tasks];
+  switch (currentView) {
+    case 'all': list = list.filter(t => !t.done); break;
+    case 'today': list = tasks.filter(t => focusPins.includes(t.id) && !t.done); break;
+    case 'urgent': list = list.filter(t => t.priority === 'urgent' && !t.done); break;
+    case 'overdue': list = list.filter(t => isOverdue(t)); break;
+    case 'done': list = list.filter(t => t.done); break;
+    case 'summary': return [];
+    case 'meeting': list = list.filter(t => t.source === 'meeting' && !t.done); break;
+    case 'slack': list = list.filter(t => t.source === 'slack' && !t.done); break;
+    case 'personal': list = list.filter(t => (t.source === 'personal' || !t.source) && !t.done); break;
+    default: list = list.filter(t => !t.done);
+  }
+  if (currentFilter !== 'all' && currentView === 'all') {
+    list = list.filter(t => t.priority === currentFilter);
+  }
+  return list.sort((a, b) => {
+    const od = (isOverdue(b) ? 1 : 0) - (isOverdue(a) ? 1 : 0);
+    if (od !== 0) return od;
+    return (priorityOrder[a.priority] || 1) - (priorityOrder[b.priority] || 1);
   });
-  const data = await res.json();
-  const raw = data.content?.[0]?.text || "[]";
-  try {
-    return JSON.parse(raw.replace(/```json|```/g, "").trim());
-  } catch { return []; }
 }
 
-const priorityConfig = {
-  urgent: { label: "Urgent", color: "#ff3b3b", bg: "rgba(255,59,59,0.1)" },
-  medium: { label: "Medium", color: "#ff9f1c", bg: "rgba(255,159,28,0.1)" },
-  low: { label: "Low", color: "#4ade80", bg: "rgba(74,222,128,0.1)" },
-};
+function updateCounts() {
+  const open = tasks.filter(t => !t.done);
+  document.getElementById('cnt-all').textContent = open.length;
+  document.getElementById('cnt-urgent').textContent = open.filter(t => t.priority === 'urgent').length;
+  document.getElementById('cnt-overdue').textContent = open.filter(t => isOverdue(t)).length;
+  document.getElementById('cnt-done').textContent = tasks.filter(t => t.done).length;
+  document.getElementById('cnt-meeting').textContent = open.filter(t => t.source === 'meeting').length;
+  document.getElementById('cnt-slack').textContent = open.filter(t => t.source === 'slack').length;
+  document.getElementById('cnt-personal').textContent = open.filter(t => !t.source || t.source === 'personal').length;
+  document.getElementById('stat-open').textContent = open.length;
+  document.getElementById('stat-done-today').textContent = doneTodayCount();
+  document.getElementById('stat-total').textContent = tasks.length;
 
-export default function App() {
-  const [tasks, setTasks] = useState([]);
-  const [filter, setFilter] = useState("all");
-  const [dump, setDump] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [quickText, setQuickText] = useState("");
-  const [quickPriority, setQuickPriority] = useState("medium");
-  const [initialized, setInitialized] = useState(false);
+  // nav active
+  ['all','today','urgent','overdue','done','summary','meeting','slack','personal'].forEach(v => {
+    const el = document.getElementById('nav-' + v);
+    if (el) el.className = 'nav-item' + (v === currentView ? ' active' : '');
+  });
+}
 
-  useEffect(() => {
-    loadTasks().then(t => { setTasks(t); setInitialized(true); });
-  }, []);
+// ===================== RENDER =====================
+function render() {
+  updateCounts();
+  const main = document.getElementById('main-content');
 
-  const persistTasks = useCallback(async (next) => {
-    setTasks(next);
-    await saveTasks(next);
-  }, []);
+  if (currentView === 'summary') { renderSummary(main); return; }
 
-  const handleExtract = async () => {
-    if (!dump.trim()) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const extracted = await extractTasksFromDump(dump);
-      if (!extracted.length) {
-        setError("Couldn't find clear tasks — try adding more detail.");
-      } else {
-        const newTasks = extracted.map(t => ({
-          id: uid(),
-          text: t.text,
-          priority: ["urgent", "medium", "low"].includes(t.priority) ? t.priority : "medium",
-          source: t.source || "personal",
-          done: false,
-          createdAt: Date.now(),
-        }));
-        await persistTasks([...newTasks, ...tasks]);
-        setDump("");
-      }
-    } catch (e) {
-      setError("Something went wrong. Try again.");
-    }
-    setLoading(false);
-  };
+  const viewTasks = getViewTasks();
+  const viewNames = { all: 'All Tasks', today: "Today's Focus", urgent: 'Urgent', overdue: 'Overdue', done: 'Completed', meeting: 'From Meetings', slack: 'From Slack', personal: 'Personal' };
 
-  const handleQuickAdd = async () => {
-    if (!quickText.trim()) return;
-    await persistTasks([{
-      id: uid(), text: quickText.trim(), priority: quickPriority,
-      source: "personal", done: false, createdAt: Date.now()
-    }, ...tasks]);
-    setQuickText("");
-  };
+  let html = `
+    <div class="page-header">
+      <div class="page-title">${viewNames[currentView] || 'Tasks'}</div>
+      <div class="page-sub">${todayStr()}</div>
+    </div>
+  `;
 
-  const toggleDone = async (id) => {
-    await persistTasks(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t));
-  };
-
-  const deleteTask = async (id) => {
-    await persistTasks(tasks.filter(t => t.id !== id));
-  };
-
-  const clearDone = async () => {
-    await persistTasks(tasks.filter(t => !t.done));
-  };
-
-  const total = tasks.length;
-  const doneCount = tasks.filter(t => t.done).length;
-  const pending = total - doneCount;
-  const urgentCount = tasks.filter(t => t.priority === "urgent" && !t.done).length;
-
-  const visible = filter === "all" ? tasks
-    : filter === "done" ? tasks.filter(t => t.done)
-    : tasks.filter(t => t.priority === filter && !t.done);
-
-  const groups = {
-    urgent: visible.filter(t => t.priority === "urgent" && !t.done),
-    medium: visible.filter(t => t.priority === "medium" && !t.done),
-    low: visible.filter(t => t.priority === "low" && !t.done),
-    done: visible.filter(t => t.done),
-  };
-
-  const s = {
-    app: { maxWidth: 740, margin: "0 auto", padding: "28px 20px 60px", fontFamily: "'DM Mono', 'Courier New', monospace", color: "#f0f0f2" },
-    header: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "1px solid #2e2e38", paddingBottom: 20, marginBottom: 28 },
-    h1: { fontFamily: "system-ui, sans-serif", fontSize: 24, fontWeight: 800, letterSpacing: -0.5, color: "#f0f0f2", margin: 0 },
-    date: { fontSize: 11, color: "#7a7a8a", marginTop: 3, textTransform: "uppercase", letterSpacing: 1 },
-    stats: { display: "flex", gap: 16, fontSize: 11, color: "#7a7a8a", textTransform: "uppercase", letterSpacing: 0.5, alignItems: "center" },
-    statVal: { color: "#f0f0f2", fontWeight: 600 },
-    dumpZone: { background: "#18181c", border: "1px solid #2e2e38", borderRadius: 10, padding: 18, marginBottom: 20, transition: "border-color 0.2s" },
-    dumpLabel: { fontSize: 10, textTransform: "uppercase", letterSpacing: 1.5, color: "#7a7a8a", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 },
-    dot: { width: 6, height: 6, background: "#ff5c35", borderRadius: "50%", display: "inline-block" },
-    textarea: { width: "100%", background: "transparent", border: "none", outline: "none", color: "#f0f0f2", fontFamily: "inherit", fontSize: 13, lineHeight: 1.7, resize: "vertical", minHeight: 90 },
-    dumpActions: { display: "flex", justifyContent: "flex-end", marginTop: 10, gap: 10, alignItems: "center" },
-    clearBtn: { background: "none", border: "none", color: "#7a7a8a", fontFamily: "inherit", fontSize: 11, cursor: "pointer", padding: "6px 10px", textTransform: "uppercase", letterSpacing: 0.5 },
-    extractBtn: (disabled) => ({ background: disabled ? "#333" : "#ff5c35", color: "white", border: "none", padding: "9px 20px", borderRadius: 6, fontFamily: "system-ui, sans-serif", fontSize: 13, fontWeight: 700, cursor: disabled ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, opacity: disabled ? 0.6 : 1 }),
-    quickRow: { display: "flex", gap: 8, marginBottom: 16 },
-    quickInput: { flex: 1, background: "#18181c", border: "1px solid #2e2e38", borderRadius: 8, padding: "9px 14px", color: "#f0f0f2", fontFamily: "inherit", fontSize: 13, outline: "none" },
-    prioritySelect: { background: "#18181c", border: "1px solid #2e2e38", color: "#f0f0f2", fontFamily: "inherit", fontSize: 11, padding: "9px 10px", borderRadius: 8, outline: "none", cursor: "pointer", textTransform: "uppercase", letterSpacing: 0.5 },
-    addBtn: { background: "#222228", border: "1px solid #2e2e38", color: "#f0f0f2", padding: "9px 16px", borderRadius: 8, fontFamily: "system-ui, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer" },
-    filters: { display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" },
-    filterBtn: (active, color) => ({ background: active ? (color || "#ff5c35") : "#18181c", border: `1px solid ${active ? (color || "#ff5c35") : "#2e2e38"}`, color: active ? (color === "#ff9f1c" ? "#111" : color === "#4ade80" ? "#111" : "white") : "#7a7a8a", padding: "5px 14px", borderRadius: 20, fontFamily: "inherit", fontSize: 11, cursor: "pointer", textTransform: "uppercase", letterSpacing: 0.5 }),
-    clearDoneBtn: { marginLeft: "auto", background: "none", border: "1px solid #2e2e38", color: "#7a7a8a", padding: "5px 14px", borderRadius: 20, fontFamily: "inherit", fontSize: 11, cursor: "pointer", textTransform: "uppercase", letterSpacing: 0.5 },
-    groupLabel: (color) => ({ fontSize: 10, textTransform: "uppercase", letterSpacing: 2, marginBottom: 10, display: "flex", alignItems: "center", gap: 8, color }),
-    groupLine: { flex: 1, height: 1, background: "#2e2e38" },
-    task: (done) => ({ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 14px", borderRadius: 8, marginBottom: 6, background: "#18181c", border: "1px solid #2e2e38", opacity: done ? 0.4 : 1 }),
-    check: (checked) => ({ width: 18, height: 18, borderRadius: 4, border: `1.5px solid ${checked ? "#ff5c35" : "#2e2e38"}`, background: checked ? "#ff5c35" : "transparent", cursor: "pointer", flexShrink: 0, marginTop: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "white", fontWeight: "bold" }),
-    taskBody: { flex: 1, minWidth: 0 },
-    taskText: (done) => ({ fontSize: 13, lineHeight: 1.5, color: done ? "#7a7a8a" : "#f0f0f2", textDecoration: done ? "line-through" : "none" }),
-    taskMeta: { display: "flex", gap: 8, marginTop: 5, flexWrap: "wrap", alignItems: "center" },
-    tag: (p) => ({ fontSize: 10, padding: "2px 8px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 500, background: priorityConfig[p]?.bg, color: priorityConfig[p]?.color }),
-    source: { fontSize: 10, color: "#7a7a8a", fontStyle: "italic" },
-    dateLabel: { fontSize: 10, color: "#7a7a8a" },
-    deleteBtn: { background: "none", border: "none", color: "#7a7a8a", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 4px", flexShrink: 0 },
-    emptyState: { textAlign: "center", padding: "50px 20px", color: "#7a7a8a", fontSize: 13, lineHeight: 1.8 },
-    errorMsg: { background: "rgba(255,59,59,0.1)", border: "1px solid rgba(255,59,59,0.2)", color: "#ff3b3b", padding: "10px 14px", borderRadius: 8, fontSize: 12, marginBottom: 16 },
-    loadingBar: { height: 2, background: "linear-gradient(90deg, #ff5c35, #ffb347)", borderRadius: 2, marginBottom: 20, animation: "pulse 1.2s ease-in-out infinite" },
-    spinner: { width: 12, height: 12, border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid white", borderRadius: "50%", animation: "spin 0.7s linear infinite" },
-  };
-
-  function TaskGroup({ label, color, items, showDone }) {
-    if (!items.length) return null;
-    return (
-      <div style={{ marginBottom: 24 }}>
-        <div style={s.groupLabel(color)}>
-          {label}
-          <div style={s.groupLine} />
-          <span style={{ fontSize: 10, opacity: 0.6 }}>{items.length}</span>
-        </div>
-        {items.map(t => (
-          <div key={t.id} style={s.task(t.done)}>
-            <div style={s.check(t.done)} onClick={() => toggleDone(t.id)}>{t.done ? "✓" : ""}</div>
-            <div style={s.taskBody}>
-              <div style={s.taskText(t.done)}>{t.text}</div>
-              <div style={s.taskMeta}>
-                <span style={s.tag(t.priority)}>{priorityConfig[t.priority]?.label}</span>
-                {t.source && <span style={s.source}>{t.source}</span>}
-                <span style={s.dateLabel}>{formatDate(t.createdAt)}</span>
-              </div>
-            </div>
-            <button style={s.deleteBtn} onClick={() => deleteTask(t.id)}>×</button>
-          </div>
-        ))}
-      </div>
-    );
+  // Today's Focus block (show on all/today views)
+  if (currentView === 'all' || currentView === 'today') {
+    html += renderFocusBlock();
   }
 
-  if (!initialized) return <div style={{ ...s.app, color: "#7a7a8a", fontSize: 13 }}>Loading...</div>;
-
-  return (
-    <div style={s.app}>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes pulse { 0%,100% { opacity:0.4 } 50% { opacity:1 } }
-        textarea::placeholder { color: #7a7a8a; }
-        input::placeholder { color: #7a7a8a; }
-      `}</style>
-
-      <div style={s.header}>
-        <div>
-          <h1 style={s.h1}>To-Do List</h1>
-          <div style={s.date}>{getToday()}</div>
-        </div>
-        <div style={s.stats}>
-          <div><span style={s.statVal}>{pending}</span> open</div>
-          <div><span style={s.statVal}>{doneCount}</span> done</div>
-          {urgentCount > 0 && <div style={{ color: "#ff3b3b" }}><span style={{ color: "#ff3b3b", fontWeight: 600 }}>{urgentCount}</span> urgent</div>}
+  // Dump zone (show on all view)
+  if (currentView === 'all') {
+    html += `
+      <div class="dump-zone" id="dumpZone">
+        <div class="dump-label">Brain dump — paste anything</div>
+        <textarea id="dumpInput" rows="3" placeholder="Paste meeting notes, Slack threads, random thoughts... Claude extracts the tasks automatically"></textarea>
+        <div class="dump-actions">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('dumpInput').value=''">Clear</button>
+          <button class="btn btn-primary btn-sm" id="extractBtn" onclick="handleExtract()">⚡ Extract Tasks</button>
         </div>
       </div>
-
-      {loading && <div style={s.loadingBar} />}
-      {error && <div style={s.errorMsg}>{error}</div>}
-
-      <div style={s.dumpZone}>
-        <div style={s.dumpLabel}>
-          <div style={s.dot} />
-          Brain dump — paste anything
-        </div>
-        <textarea
-          style={s.textarea}
-          value={dump}
-          onChange={e => setDump(e.target.value)}
-          placeholder="Meeting notes, Slack threads, random thoughts... paste it all here and hit Extract Tasks"
-          rows={4}
-        />
-        <div style={s.dumpActions}>
-          <button style={s.clearBtn} onClick={() => setDump("")}>Clear</button>
-          <button
-            style={s.extractBtn(loading || !dump.trim())}
-            onClick={handleExtract}
-            disabled={loading || !dump.trim()}
-          >
-            {loading ? <div style={s.spinner} /> : "⚡"}
-            {loading ? "Extracting..." : "Extract Tasks"}
-          </button>
-        </div>
-      </div>
-
-      <div style={s.quickRow}>
-        <input
-          style={s.quickInput}
-          value={quickText}
-          onChange={e => setQuickText(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleQuickAdd()}
-          placeholder="Quick add a task..."
-        />
-        <select style={s.prioritySelect} value={quickPriority} onChange={e => setQuickPriority(e.target.value)}>
-          <option value="urgent">Urgent</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
+      <div id="msgZone"></div>
+      <div class="quick-row">
+        <input class="quick-input" id="quickInput" placeholder="Quick add a task... (press Enter)" onkeydown="if(event.key==='Enter')handleQuickAdd()" />
+        <select id="quickPriority">
+          <option value="urgent">🔴 Urgent</option>
+          <option value="medium" selected>🟡 Medium</option>
+          <option value="low">🟢 Low</option>
         </select>
-        <button style={s.addBtn} onClick={handleQuickAdd}>Add</button>
+        <select id="quickSource">
+          <option value="personal">💡 Personal</option>
+          <option value="meeting">🤝 Meeting</option>
+          <option value="slack">💬 Slack</option>
+          <option value="email">📧 Email</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="handleQuickAdd()">Add</button>
       </div>
-
-      <div style={s.filters}>
-        {[
-          { key: "all", label: `All (${pending})` },
-          { key: "urgent", label: `Urgent (${groups.urgent.length})`, color: "#ff3b3b" },
-          { key: "medium", label: `Medium (${groups.medium.length})`, color: "#ff9f1c" },
-          { key: "low", label: `Low (${groups.low.length})`, color: "#4ade80" },
-          { key: "done", label: `Done (${doneCount})` },
-        ].map(({ key, label, color }) => (
-          <button key={key} style={s.filterBtn(filter === key, color)} onClick={() => setFilter(key)}>{label}</button>
-        ))}
-        {doneCount > 0 && <button style={s.clearDoneBtn} onClick={clearDone}>Clear done</button>}
+      <div class="filters">
+        <button class="filter-btn ${currentFilter==='all'?'active':''}" onclick="setFilter('all')">All</button>
+        <button class="filter-btn f-urgent ${currentFilter==='urgent'?'active':''}" onclick="setFilter('urgent')">🔴 Urgent</button>
+        <button class="filter-btn f-medium ${currentFilter==='medium'?'active':''}" onclick="setFilter('medium')">🟡 Medium</button>
+        <button class="filter-btn f-low ${currentFilter==='low'?'active':''}" onclick="setFilter('low')">🟢 Low</button>
+        <button class="btn btn-ghost btn-sm ml-auto" onclick="clearDone()">Clear completed</button>
       </div>
+    `;
+  }
 
-      {total === 0 ? (
-        <div style={s.emptyState}>
-          <div style={{ fontFamily: "system-ui", fontSize: 18, fontWeight: 800, color: "#2e2e38", marginBottom: 8 }}>Nothing here yet</div>
-          Dump your brain above — meetings, Slack threads, random thoughts —<br />and hit Extract Tasks.
-        </div>
-      ) : visible.length === 0 ? (
-        <div style={s.emptyState}>
-          <div style={{ fontFamily: "system-ui", fontSize: 18, fontWeight: 800, color: "#2e2e38", marginBottom: 8 }}>All clear</div>
-          No tasks in this view.
-        </div>
-      ) : (
-        <>
-          {(filter === "all" || filter === "urgent") && <TaskGroup label="🔴 Urgent" color="#ff3b3b" items={groups.urgent} />}
-          {(filter === "all" || filter === "medium") && <TaskGroup label="🟡 Medium" color="#ff9f1c" items={groups.medium} />}
-          {(filter === "all" || filter === "low") && <TaskGroup label="🟢 Low" color="#4ade80" items={groups.low} />}
-          {(filter === "all" || filter === "done") && groups.done.length > 0 && <TaskGroup label="✓ Done" color="#3a3a45" items={groups.done} />}
-        </>
-      )}
-    </div>
-  );
+  // Task groups
+  if (currentView === 'all' && currentFilter === 'all') {
+    const groups = [
+      { key: 'urgent', label: '🔴 Urgent', color: '#dc2626', items: viewTasks.filter(t => t.priority === 'urgent') },
+      { key: 'medium', label: '🟡 Medium', color: '#d97706', items: viewTasks.filter(t => t.priority === 'medium') },
+      { key: 'low', label: '🟢 Low', color: '#16a34a', items: viewTasks.filter(t => t.priority === 'low') },
+    ];
+    for (const g of groups) {
+      if (!g.items.length) continue;
+      html += `<div class="group"><div class="group-label" style="color:${g.color}">${g.label}<div class="group-line"></div><span style="font-size:10px;opacity:0.5">${g.items.length}</span></div>`;
+      for (const t of g.items) html += taskCard(t);
+      html += `</div>`;
+    }
+  } else {
+    if (!viewTasks.length) {
+      html += `<div class="empty-state"><span class="empty-big">All clear</span>Nothing in this view.</div>`;
+    } else {
+      for (const t of viewTasks) html += taskCard(t);
+    }
+  }
+
+  if (currentView === 'all' && viewTasks.length === 0 && currentFilter === 'all') {
+    html += `<div class="empty-state"><span class="empty-big">Nothing here yet</span>Dump your brain above or quick-add a task.</div>`;
+  }
+
+  main.innerHTML = html;
 }
+
+function renderFocusBlock() {
+  let slots = '';
+  for (let i = 0; i < 3; i++) {
+    const taskId = focusPins[i];
+    const task = taskId ? tasks.find(t => t.id === taskId) : null;
+    if (task && !task.done) {
+      slots += `<div class="focus-slot filled">
+        <span class="focus-num">${i+1}</span>
+        <span class="focus-text">${escHtml(task.text)}</span>
+        <button class="focus-remove" onclick="unpinFocus(${i})">×</button>
+      </div>`;
+    } else {
+      slots += `<div class="focus-slot" onclick="openFocusModal(${i})">
+        <span class="focus-num">${i+1}</span>
+        <span class="focus-empty">+ Pin a task for today</span>
+      </div>`;
+    }
+  }
+  return `<div class="focus-section">
+    <div class="focus-header">
+      <span class="focus-title">🎯 Today's Focus</span>
+      <span class="focus-hint">Your top 3 for today</span>
+    </div>
+    <div class="focus-slots">${slots}</div>
+  </div>`;
+}
+
+function taskCard(t) {
+  const overdue = isOverdue(t);
+  const dueToday = isDueToday(t);
+  const pinIdx = focusPins.indexOf(t.id);
+  const isPinned = pinIdx >= 0;
+  const isExpanded = expandedTask === t.id;
+
+  return `<div class="task ${t.done ? 'done' : ''}" id="task-${t.id}">
+    <div class="task-main">
+      <div class="task-check ${t.done ? 'checked' : ''}" onclick="toggleDone('${t.id}')">${t.done ? '✓' : ''}</div>
+      <div class="task-body" onclick="toggleExpand('${t.id}')">
+        <div class="task-text">${escHtml(t.text)}</div>
+        <div class="task-meta">
+          <span class="tag tag-${t.priority}">${t.priority}</span>
+          ${t.source ? `<span class="tag tag-source">${sourceLabel(t.source)}</span>` : ''}
+          ${overdue ? `<span class="tag tag-overdue">⚠ Overdue</span>` : ''}
+          ${dueToday && !overdue ? `<span class="tag tag-medium">Due today</span>` : ''}
+          ${t.dueDate ? `<span class="task-date">📅 ${t.dueDate}</span>` : ''}
+          ${t.notes ? `<span class="task-date">📝 Note</span>` : ''}
+          ${t.createdAt ? `<span class="task-date">${formatDate(t.createdAt)}</span>` : ''}
+        </div>
+      </div>
+      <div class="task-actions">
+        <button class="task-btn ${isPinned ? 'pin' : ''}" onclick="togglePin('${t.id}')" title="${isPinned ? 'Unpin from focus' : 'Pin to today\'s focus'}">🎯</button>
+        <button class="task-btn" onclick="deleteTask('${t.id}')" title="Delete">×</button>
+      </div>
+    </div>
+    <div class="task-expand ${isExpanded ? 'open' : ''}" id="expand-${t.id}">
+      <span class="expand-label">Notes</span>
+      <textarea class="task-notes" placeholder="Add notes..." onchange="updateNotes('${t.id}', this.value)">${escHtml(t.notes || '')}</textarea>
+      <span class="expand-label">Due Date</span>
+      <input type="date" class="task-due-input" value="${t.dueDate || ''}" onchange="updateDue('${t.id}', this.value)" />
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <select style="font-size:11px;padding:5px 8px" onchange="updatePriority('${t.id}', this.value)">
+          <option value="urgent" ${t.priority==='urgent'?'selected':''}>🔴 Urgent</option>
+          <option value="medium" ${t.priority==='medium'?'selected':''}>🟡 Medium</option>
+          <option value="low" ${t.priority==='low'?'selected':''}>🟢 Low</option>
+        </select>
+        <select style="font-size:11px;padding:5px 8px" onchange="updateSource('${t.id}', this.value)">
+          <option value="personal" ${(t.source==='personal'||!t.source)?'selected':''}>💡 Personal</option>
+          <option value="meeting" ${t.source==='meeting'?'selected':''}>🤝 Meeting</option>
+          <option value="slack" ${t.source==='slack'?'selected':''}>💬 Slack</option>
+          <option value="email" ${t.source==='email'?'selected':''}>📧 Email</option>
+        </select>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderSummary(main) {
+  const open = tasks.filter(t => !t.done);
+  const doneToday = tasks.filter(t => t.done && t.doneAt && t.doneAt.startsWith(TODAY));
+  const overdue = tasks.filter(t => isOverdue(t));
+  const urgent = open.filter(t => t.priority === 'urgent');
+
+  let html = `
+    <div class="page-header">
+      <div class="page-title">Daily Summary</div>
+      <div class="page-sub">${todayStr()}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-row"><span>Tasks completed today</span><span class="summary-num" style="color:var(--low)">${doneToday.length}</span></div>
+      <div class="summary-row"><span>Still open</span><span class="summary-num">${open.length}</span></div>
+      <div class="summary-row"><span>Urgent remaining</span><span class="summary-num" style="color:var(--urgent)">${urgent.length}</span></div>
+      <div class="summary-row"><span>Overdue</span><span class="summary-num" style="color:var(--urgent)">${overdue.length}</span></div>
+    </div>
+  `;
+
+  if (doneToday.length) {
+    html += `<div class="group"><div class="group-label" style="color:var(--low)">✓ Completed Today<div class="group-line"></div></div>`;
+    doneToday.forEach(t => { html += taskCard(t); });
+    html += `</div>`;
+  }
+
+  if (urgent.length) {
+    html += `<div class="group"><div class="group-label" style="color:var(--urgent)">🔴 Still Urgent<div class="group-line"></div></div>`;
+    urgent.forEach(t => { html += taskCard(t); });
+    html += `</div>`;
+  }
+
+  if (overdue.length) {
+    html += `<div class="group"><div class="group-label" style="color:var(--urgent)">⚠ Overdue<div class="group-line"></div></div>`;
+    overdue.forEach(t => { html += taskCard(t); });
+    html += `</div>`;
+  }
+
+  html += `<div style="margin-top:20px;display:flex;gap:8px">
+    <button class="btn btn-ghost btn-sm" onclick="carryForward()">🔁 Carry all open to tomorrow</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearDone()">Clear completed</button>
+  </div>`;
+
+  main.innerHTML = html;
+}
+
+// ===================== ACTIONS =====================
+function toggleDone(id) {
+  tasks = tasks.map(t => t.id === id ? { ...t, done: !t.done, doneAt: !t.done ? new Date().toISOString() : null } : t);
+  save(); render();
+}
+
+function deleteTask(id) {
+  tasks = tasks.filter(t => t.id !== id);
+  focusPins = focusPins.map(p => p === id ? null : p);
+  save(); render();
+}
+
+function toggleExpand(id) {
+  expandedTask = expandedTask === id ? null : id;
+  render();
+}
+
+function togglePin(id) {
+  const idx = focusPins.indexOf(id);
+  if (idx >= 0) { focusPins[idx] = null; }
+  else {
+    const slot = focusPins.indexOf(null);
+    if (slot >= 0) focusPins[slot] = id;
+    else focusPins[2] = id;
+  }
+  save(); render();
+}
+
+function unpinFocus(i) { focusPins[i] = null; save(); render(); }
+
+function updateNotes(id, val) {
+  tasks = tasks.map(t => t.id === id ? { ...t, notes: val } : t);
+  save();
+}
+
+function updateDue(id, val) {
+  tasks = tasks.map(t => t.id === id ? { ...t, dueDate: val } : t);
+  save(); render();
+}
+
+function updatePriority(id, val) {
+  tasks = tasks.map(t => t.id === id ? { ...t, priority: val } : t);
+  save(); render();
+}
+
+function updateSource(id, val) {
+  tasks = tasks.map(t => t.id === id ? { ...t, source: val } : t);
+  save(); render();
+}
+
+function clearDone() {
+  tasks = tasks.filter(t => !t.done);
+  save(); render();
+}
+
+function carryForward() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const ts = tomorrow.toISOString().split('T')[0];
+  tasks = tasks.map(t => !t.done ? { ...t, dueDate: ts } : t);
+  save(); render();
+}
+
+function setView(v) { currentView = v; currentFilter = 'all'; expandedTask = null; render(); }
+function setFilter(f) { currentFilter = f; render(); }
+
+// ===================== QUICK ADD =====================
+function handleQuickAdd() {
+  const input = document.getElementById('quickInput');
+  const priority = document.getElementById('quickPriority');
+  const source = document.getElementById('quickSource');
+  const text = input?.value?.trim();
+  if (!text) return;
+  tasks.unshift({ id: uid(), text, priority: priority?.value || 'medium', source: source?.value || 'personal', done: false, createdAt: Date.now() });
+  save(); input.value = ''; render();
+}
+
+// ===================== AI EXTRACT =====================
+async function handleExtract() {
+  const input = document.getElementById('dumpInput');
+  const text = input?.value?.trim();
+  if (!text) return;
+
+  if (!apiKey) {
+    showApiModal();
+    showMsg('Please add your Anthropic API key first.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('extractBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Extracting...'; }
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: `Extract all action items from this brain dump. Return ONLY a JSON array, no markdown, no explanation. Each object: { "text": "clear actionable task", "priority": "urgent|medium|low", "source": "meeting|slack|personal|email" }.
+
+Priority rules:
+- urgent = blocking, needed today, time-sensitive
+- medium = important but not today-critical
+- low = someday, nice-to-have, background
+
+Infer source from context. Make each task a clear action verb sentence.
+
+Brain dump:
+${text}` }]
+      })
+    });
+    const data = await res.json();
+    const raw = data.content?.[0]?.text || '[]';
+    const extracted = JSON.parse(raw.replace(/```json|```/g, '').trim());
+
+    if (!extracted.length) {
+      showMsg("Couldn't find clear tasks — try adding more detail.", 'error');
+    } else {
+      const newTasks = extracted.map(t => ({
+        id: uid(), text: t.text,
+        priority: ['urgent','medium','low'].includes(t.priority) ? t.priority : 'medium',
+        source: ['meeting','slack','personal','email'].includes(t.source) ? t.source : 'personal',
+        done: false, createdAt: Date.now()
+      }));
+      tasks = [...newTasks, ...tasks];
+      save();
+      input.value = '';
+      showMsg(`✓ Extracted ${newTasks.length} task${newTasks.length > 1 ? 's' : ''}`, 'success');
+    }
+  } catch (e) {
+    showMsg('Error: ' + (e.message || 'Something went wrong.'), 'error');
+  }
+
+  render();
+}
+
+function showMsg(msg, type) {
+  const zone = document.getElementById('msgZone');
+  if (!zone) return;
+  zone.innerHTML = `<div class="${type}-msg" style="margin-bottom:12px">${msg}</div>`;
+  setTimeout(() => { if (zone) zone.innerHTML = ''; }, 4000);
+}
+
+// ===================== FOCUS MODAL =====================
+function openFocusModal(slotIdx) {
+  window._focusSlot = slotIdx;
+  const list = document.getElementById('focusPickList');
+  const open = tasks.filter(t => !t.done && !focusPins.includes(t.id));
+  if (!open.length) { list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px">No available tasks to pin.</div>'; }
+  else {
+    list.innerHTML = open.map(t => `
+      <div style="padding:10px 12px;background:var(--surface2);border-radius:7px;cursor:pointer;font-size:13px" onclick="pickFocus('${t.id}')">
+        <span class="tag tag-${t.priority}" style="margin-right:8px">${t.priority}</span>${escHtml(t.text)}
+      </div>
+    `).join('');
+  }
+  document.getElementById('focusModal').style.display = 'flex';
+}
+
+function pickFocus(id) {
+  const slot = window._focusSlot ?? focusPins.indexOf(null);
+  if (slot >= 0 && slot < 3) focusPins[slot] = id;
+  save(); closeFocusModal(); render();
+}
+
+function closeFocusModal() { document.getElementById('focusModal').style.display = 'none'; }
+
+// ===================== API MODAL =====================
+function showApiModal() {
+  document.getElementById('apiKeyInput').value = apiKey;
+  document.getElementById('apiModal').style.display = 'flex';
+}
+
+function closeApiModal() { document.getElementById('apiModal').style.display = 'none'; }
+
+function saveApiKey() {
+  apiKey = document.getElementById('apiKeyInput').value.trim();
+  localStorage.setItem('dd_api_key', apiKey);
+  closeApiModal();
+}
+
+// ===================== UTILS =====================
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function sourceLabel(s) {
+  return { meeting: '🤝 Meeting', slack: '💬 Slack', personal: '💡 Personal', email: '📧 Email' }[s] || s;
+}
+
+// ===================== INIT =====================
+load();
+render();
+</script>
+</body>
+</html>
